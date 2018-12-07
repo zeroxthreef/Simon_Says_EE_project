@@ -764,3 +764,100 @@ void loop(void)
 
   state_logic();
 }
+
+/*
+
+const int ledPinG = 1;
+const int ledPinR = 2;
+const int ledPinY = 3;
+const int ledPinB = 4;
+const int buttonPinG = PUSH2;
+const int buttonPinR = PUSH2;
+const int buttonPinY = PUSH2;
+const int buttonPinB = PUSH2;
+int buttonStateG = digitalRead(buttonPinG);
+int buttonStateR = digitalRead(buttonPinY);
+int buttonStateY = digitalRead(buttonPinR);
+int buttonStateB = digitalRead(buttonPinB);
+void setup() {
+  srand(time(0));
+  int lightSequence [50];
+  int lightNum = (rand() % 3) + 1;
+  int i=0;
+  while(buttonStateG == HIGH && buttonStateR == HIGH && buttonStateY == HIGH && buttonStateB == HIGH){
+    for (int j=0; j<i; j++){
+        switch (lightSequence[j]){
+          case  1:
+            digitalWrite(ledPinG, HIGH);
+            tone(8, NOTE_D4, (4/1000));
+            delay(1000);
+            digitalWrite(ledPinG, LOW);
+            break;
+          case  2:
+            digitalWrite(ledPinR, HIGH);
+            tone(8, NOTE_C4, (4/1000));
+            delay(1000);
+            digitalWrite(ledPinR, LOW);
+            break;
+          case  3:
+            digitalWrite(ledPinY, HIGH);
+            tone(8, NOTE_E4, (4/1000));
+            delay(1000);
+            digitalWrite(ledPinY, LOW);
+            break;
+          case  4:
+            digitalWrite(ledPinB, HIGH);
+            tone(8, NOTE_F4, (4/1000));
+            delay(1000);
+            digitalWrite(ledPinB, LOW);
+            break;
+        }
+    } //previous pattern
+    
+    lightSequence[i] = lightNum;
+    
+    switch (lightNum){
+      case  1:
+        digitalWrite(ledPinG, HIGH);
+        tone(8, NOTE_D4, (4/1000));
+        delay(1000);
+        digitalWrite(ledPinG, LOW);
+        break;
+      case  2:
+        digitalWrite(ledPinR, HIGH);
+        tone(8, NOTE_C4, (4/1000));
+        delay(1000);
+        digitalWrite(ledPinR, LOW);
+        break;
+      case  3:
+        digitalWrite(ledPinY, HIGH);
+        tone(8, NOTE_E4, (4/1000));
+        delay(1000);
+        digitalWrite(ledPinY, LOW);
+        break;
+      case  4:
+        digitalWrite(ledPinB, HIGH);
+        tone(8, NOTE_F4, (4/1000));
+        delay(1000);
+        digitalWrite(ledPinB, LOW);
+        break;
+    } //added on to pattern
+    
+    int totalRight = 0;
+    for (int j=0; j<=i; j++){
+        if ((buttonStateG == HIGH && lightSequence[j] == 1)||(buttonStateR == HIGH && lightSequence[j] == 2)
+            ||(buttonStateY == HIGH && lightSequence[j] == 3)||(buttonStateB == HIGH && lightSequence[j] == 4)){
+            totalRight++;
+        }
+    }
+    if (totalRight = i){
+        i++;
+    }
+  }
+}
+
+void loop() {
+  
+  
+}
+*/
