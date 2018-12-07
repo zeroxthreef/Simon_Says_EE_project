@@ -291,6 +291,8 @@ song_channel_t test_music[] = {
 
 uint8_t state, previous_state, button_press, music_output;
 
+unsigned int random_seed = 0;
+
 
 
 /* functions */
@@ -688,13 +690,24 @@ void button_sound(void)
 
 }
 
+void state_menu_logic(void)
+{
+  /* temporary listening for the menu button to start the game. Will use taps in the future */
+  if(button_states.button_menu)
+  {
+    random_seed = millis();
+    state = STATE_GAME;
+  }
+}
+
 void state_logic(void)
 {
   static unsigned long song_column = 0;
   
   if(state == STATE_MENU || state == STATE_HIGHSCORE)
   {
-    play_music(menu_music, (sizeof(menu_music) / sizeof(menu_music[0])) - 1, song_column, 200);
+    state_menu_logic();
+    //play_music(menu_music, (sizeof(menu_music) / sizeof(menu_music[0])) - 1, song_column, 200);
     //play_music(test_music, (sizeof(test_music) / sizeof(test_music[0])) - 1, song_column, 200 * 2); /* 100*2 */
   }
 
@@ -721,7 +734,7 @@ void setup(void)
   pinMode(BUTTON_3, INPUT_PULLUP);
   pinMode(BUTTON_4, INPUT_PULLUP);
 
-  state = STATE_GAME;
+  state = STATE_MENU;
   button_press = 0;
   music_output = 1;
 
