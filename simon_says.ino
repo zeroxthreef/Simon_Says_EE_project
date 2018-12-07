@@ -690,6 +690,11 @@ void button_sound(void)
 
 }
 
+void state_game_logic(void)
+{
+  /* TODO echo the sequence by re-seeding rand with srand(random_seed); and running rand() to get the sequence from the beginning each time the user does well. */
+}
+
 void state_menu_logic(void)
 {
   /* temporary listening for the menu button to start the game. Will use taps in the future */
@@ -709,6 +714,10 @@ void state_logic(void)
     state_menu_logic();
     //play_music(menu_music, (sizeof(menu_music) / sizeof(menu_music[0])) - 1, song_column, 200);
     //play_music(test_music, (sizeof(test_music) / sizeof(test_music[0])) - 1, song_column, 200 * 2); /* 100*2 */
+  }
+  else
+  {
+    state_game_logic();
   }
 
   
