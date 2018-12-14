@@ -1,3 +1,25 @@
+/*
+ * Technical documentation
+ * 
+ * 
+ * The core concept for the simon says game is seeding the rand() function every time to read back the sequence
+ * 
+ * First, the user presses the game select button and it uses the millisecond timing of that press to generate the seed. This will always be something different
+ * because the button will not be pressed exactly at the same millisecond each time a game has started.
+ * 
+ * Next, the game runs like a normal simon says, but the playback and read in modes re-seed rand() with the srand() function with the seed previously generated each time it needs
+ * to be read from the beginning.
+ * 
+ * The game knows the end of the sequence by just counting. This way, the sequence can be endless and no arrays are ever used which would take up space and cpu power to initialize
+ * all elements
+ * 
+ * Realistically, the user can only have a max score of 63 because of only having 6 LEDs, and subsequently, a 6 bit number. This could be extended by adding more LEDs.
+ * 
+ */
+
+
+/* all of the defines for pins and other constant numbers for controlling important tasks */
+/* LEDs on the breadboard from left to right */
 #define LED_0 2
 #define LED_1 3
 #define LED_2 4
@@ -5,22 +27,35 @@
 #define LED_4 6
 #define LED_5 7
 
-#define SPEAKER_CHANNEL_0 8
+#define SPEAKER_CHANNEL_0 8 /* the speaker is on pin 8 */
 
+/* buttons on the breadboard from left to right */
 #define BUTTON_0 23
 #define BUTTON_1 24
 #define BUTTON_2 25
 #define BUTTON_3 26
 #define BUTTON_4 27
 
+/* the amount of time that dynamic button sound effects play for */
 #define BUTTON_SOUND_LENGTH 200
 
+#define ROUND_DELAY 600
+
 /* global variables */
+
+/* all of the states that the simon says can be in */
 enum game_states_e
 {
   STATE_MENU,
-  STATE_GAME,
-  STATE_HIGHSCORE
+  STATE_GAME_MODE_0,
+  STATE_GAME_MODE_1,
+  STATE_GAME_MODE_2,
+  STATE_GAME_MODE_3,
+  STATE_HIGHSCORE,
+  STATE_HIGHSCORE_0,
+  STATE_HIGHSCORE_1,
+  STATE_HIGHSCORE_2,
+  STATE_HIGHSCORE_3
 };
 
 enum note_pitches_e /* all 88 pitch vales rounded from the list at https://en.wikipedia.org/wiki/Piano_key_frequencies */
@@ -116,30 +151,7 @@ enum note_pitches_e /* all 88 pitch vales rounded from the list at https://en.wi
   NOTE_C8 = 4186
 };
 
-/*
-enum note_rhythm_e
-{
-  NOTE_FOREVER,
-  NOTE_WHOLE,
-  NOTE_HALF,
-  NOTE_QUARTER,
-  NOTE_SIXTEENTH
-};
-*/
-
-enum note_percussion_e
-{
-  NOTE_PERCUSSION_OFF,
-  NOTE_PERCUSSION_SNARE,
-  NOTE_PERCUSSION_TOM
-};
-
-enum music_qualities_e
-{
-  MUSIC_ONCE,
-  MUSIC_LOOP
-};
-
+/* the button struct for getting data from buttons */
 typedef struct
 {
   uint8_t button_0;
@@ -148,317 +160,16 @@ typedef struct
   uint8_t button_3;
   uint8_t button_menu;
   uint8_t last_button;
+  uint8_t last_press_millis;
 } buttons_t;
 
-typedef struct
-{
-  unsigned int channel_melody0_note;
-  unsigned int channel_melody1_note;
-  unsigned int channel_melody2_note;
-  unsigned int channel_percussion_instrum;
-} song_channel_t;
-
+/* the global variable declarations */
 buttons_t button_states;
 
+uint8_t state, reset_game, playback, difficulty_1_hs = 0, difficulty_2_hs = 0, difficulty_3_hs = 0, difficulty_4_hs = 0;
+uint32_t random_seed = 0, game_level;
 
-/* using this song as the example, every song has columns that are, at max (with normal tempos), a quarter note so every 4 notes is a whole note. One could make 16th or 32nd notes by speeding up the tempo by 2 or 4 */
-song_channel_t menu_music[] = {
-  /*{MUSIC_LOOP, 0, 0, 80}, /* needed for the settings of every song to tell the player whats it needs to know. row 1 is looping ability and last is tempo */
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_TOM},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_SNARE},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_TOM},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_TOM},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_TOM},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_SNARE},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-
-  
-  {NOTE_C4, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_E4, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E4, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E4, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E4, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E4, NOTE_G4, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E4, NOTE_G4, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E4, NOTE_G4, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E4, NOTE_G4, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E4, NOTE_G4, NOTE_PERCUSSION_SNARE},
-  {NOTE_C4, NOTE_E4, NOTE_G4, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E4, NOTE_G4, NOTE_PERCUSSION_SNARE},
-  {NOTE_C4, NOTE_E4, NOTE_G4, NOTE_PERCUSSION_TOM}
-};
-
-song_channel_t test_music[] = {
-  {NOTE_E4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_E4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_E4, NOTE_OFF, NOTE_G3, NOTE_PERCUSSION_OFF},
-  {NOTE_E4, NOTE_OFF, NOTE_G3, NOTE_PERCUSSION_OFF},
-
-  {NOTE_D4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_G3, NOTE_PERCUSSION_OFF},
-  {NOTE_E4, NOTE_OFF, NOTE_G3, NOTE_PERCUSSION_OFF},
-
-
-  {NOTE_OFF, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_Gs3Ab3, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_Gs3Ab3, NOTE_PERCUSSION_OFF},
-
-  {NOTE_OFF, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_G3, NOTE_PERCUSSION_OFF},
-  {NOTE_D4, NOTE_OFF, NOTE_G3, NOTE_PERCUSSION_OFF},
-
-
-  {NOTE_E4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_E4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_E4, NOTE_OFF, NOTE_A3, NOTE_PERCUSSION_OFF},
-  {NOTE_E4, NOTE_OFF, NOTE_A3, NOTE_PERCUSSION_OFF},
-  
-  {NOTE_D4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_D4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_A3, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_A3, NOTE_PERCUSSION_OFF},
-
-
-  {NOTE_E4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_E4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_F4, NOTE_OFF, NOTE_As3Bb3, NOTE_PERCUSSION_OFF},
-  {NOTE_F4, NOTE_OFF, NOTE_As3Bb3, NOTE_PERCUSSION_OFF},
-
-  {NOTE_G4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_G4, NOTE_C3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_A4, NOTE_OFF, NOTE_A3, NOTE_PERCUSSION_OFF},
-  {NOTE_A4, NOTE_OFF, NOTE_A3, NOTE_PERCUSSION_OFF},
-
-
-  {NOTE_OFF, NOTE_F3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_F3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_C4, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_C4, NOTE_PERCUSSION_OFF},
-
-  {NOTE_C4, NOTE_F3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_F3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_A3, NOTE_OFF, NOTE_C4, NOTE_PERCUSSION_OFF},
-  {NOTE_A3, NOTE_OFF, NOTE_C4, NOTE_PERCUSSION_OFF},
-
-
-  {NOTE_G3, NOTE_E3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_G3, NOTE_E3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_C4, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_C4, NOTE_PERCUSSION_OFF},
-
-  {NOTE_C4, NOTE_E3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_E3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_C4, NOTE_PERCUSSION_OFF},
-  {NOTE_C4, NOTE_OFF, NOTE_C4, NOTE_PERCUSSION_OFF},
-
-
-  {NOTE_F3, NOTE_D3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_F3, NOTE_D3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_G3, NOTE_E3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_G3, NOTE_E3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-
-  {NOTE_A3, NOTE_F3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_A3, NOTE_F3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_B3, NOTE_As3Bb3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_B3, NOTE_As3Bb3, NOTE_OFF, NOTE_PERCUSSION_OFF},
-
-
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_F4, NOTE_G4, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  
-  {NOTE_F4, NOTE_G4, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_F4, NOTE_G4, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF},
-  {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_PERCUSSION_OFF}
-};
-
-uint8_t state, previous_state, button_press, music_output;
-
-unsigned int random_seed = 0;
-
-
-
-/* functions */
-
-void play_music(void *music_temp, unsigned long note_count, unsigned long &song_column, unsigned int bpm)
-{
-  song_channel_t *music = (song_channel_t *)music_temp; /* have to typecast it because the compiler acts strange with a typedef in the function arguments */
-  uint8_t can_loop;
-  unsigned int beat_millis = 60000 / bpm, effect_speed = 10, delay_adjust = 2, channel_select = 0, playable_channel = 0;
-  uint8_t channels_playing = 0;
-  static unsigned int column_began = millis();
-  static unsigned int column_end = column_began + beat_millis;
-  static unsigned int last_effect = column_began;
-  
-
-  if(song_column > note_count)
-  {
-    song_column = 0;
-  }
-
-  
-  if(music[song_column].channel_melody0_note != NOTE_OFF)
-  {
-    channels_playing++;
-  }
-
-  if(music[song_column].channel_melody1_note != NOTE_OFF)
-  {
-    channels_playing++;
-  }
-
-  if(music[song_column].channel_melody2_note != NOTE_OFF)
-  {
-    channels_playing++;
-  }
-
-  /*
-  if(music[song_column].channel_percussion_instrum != NOTE_PERCUSSION_OFF)
-  {
-    channels_playing++;
-  }
-  */
-  
-
-  /* This was my first attempt. Its arpeggios are dependant on the tempo and notes playing. Its very subpar */
-  /*
-  if(channels_playing == 0)
-    delay(beat_millis);
-  else
-  {
-    if(music[song_column].channel_melody0_note)
-    {
-      tone(SPEAKER_CHANNEL_0, music[song_column].channel_melody0_note, beat_millis);
-      delay(beat_millis/channels_playing);
-    }
-    if(music[song_column].channel_melody1_note)
-    {
-      tone(SPEAKER_CHANNEL_0, music[song_column].channel_melody1_note, beat_millis);
-      delay(beat_millis/channels_playing);
-    }
-    if(music[song_column].channel_melody2_note)
-    {
-      tone(SPEAKER_CHANNEL_0, music[song_column].channel_melody2_note, beat_millis);
-      delay(beat_millis/channels_playing);
-    }
-    if(music[song_column].channel_percussion_instrum)
-    {
-      if(music[song_column].channel_percussion_instrum == NOTE_PERCUSSION_SNARE)
-      {
-        for(int i = 0; i < 200/channels_playing; i++)
-        {
-          tone(SPEAKER_CHANNEL_0, random(NOTE_C6, NOTE_C8), beat_millis/(200/channels_playing));
-          delay(beat_millis/channels_playing/(200/channels_playing));
-        }
-      }
-      if(music[song_column].channel_percussion_instrum == NOTE_PERCUSSION_TOM)
-      {
-        for(int i = 0; i < 200/channels_playing; i++)
-        {
-          tone(SPEAKER_CHANNEL_0, random(NOTE_C3, NOTE_C6), beat_millis/(200/channels_playing));
-          delay(beat_millis/channels_playing/(200/channels_playing));
-        }
-      }
-      //delay(200/channels_playing/50);
-    }
-  }
-    */
-    
-
-    if(millis() <= column_end)
-    {
-      /* TODO: non-percussion music effects */
-      if(effect_speed < millis() - last_effect)
-      {
-        /* TODO make percissuin land first and take half*/
-        if(music[song_column].channel_percussion_instrum == NOTE_PERCUSSION_SNARE && millis() - column_began < ((column_end - column_began) / 2))
-        {
-          tone(SPEAKER_CHANNEL_0, random(NOTE_C6, NOTE_C8), effect_speed);
-        }
-        else if(music[song_column].channel_percussion_instrum == NOTE_PERCUSSION_TOM && millis() - column_began < ((column_end - column_began) / 2))
-        {
-          tone(SPEAKER_CHANNEL_0, random(NOTE_C3, NOTE_C6), effect_speed);
-        }
-        else
-        {
-          if(channels_playing)
-          {
-            while(!playable_channel)
-            {
-              switch(channel_select % 3)
-              {
-                case 0:
-                  if(music[song_column].channel_melody0_note)
-                  {
-                    tone(SPEAKER_CHANNEL_0, music[song_column].channel_melody0_note, effect_speed + delay_adjust);
-                    playable_channel++;
-                  }
-                break;
-                case 1:
-                  if(music[song_column].channel_melody1_note)
-                  {
-                    tone(SPEAKER_CHANNEL_0, music[song_column].channel_melody1_note, effect_speed + delay_adjust);
-                    playable_channel++;
-                  }
-                break;
-
-                case 2:
-                  if(music[song_column].channel_melody1_note)
-                  {
-                    tone(SPEAKER_CHANNEL_0, music[song_column].channel_melody2_note, effect_speed + delay_adjust);
-                    playable_channel++;
-                  }
-                break;
-              }
-
-              channel_select++; /* the melody channels need an arpeggio to simulate chords */
-            }
-          }
-          
-        }
-
-        
-
-        
-        last_effect = millis();
-      }
-      
-    }
-    else
-    {
-      column_began = millis();
-      column_end = column_began + beat_millis;
-      song_column += 1;
-    }
-    
-    
-    
-
-    
-
-  
-
-  
-
-  
-}
+/* the functions */
 
 /* display a number in binary (maximum 6 bits though). This means that the high score has to be, at max, 63. */
 void display_binary(uint8_t number)
@@ -524,7 +235,9 @@ void display_binary(uint8_t number)
 /* controls the indicator LEDs when use pressing */
 void button_echo(void)
 {
-  if(button_states.button_0)
+  if(!playback) /* do not control the LEDs if the game is playing back the simon says pattern */
+  {
+    if(digitalRead(BUTTON_0) == LOW)
   {
     digitalWrite(LED_0, HIGH);
   }
@@ -533,7 +246,7 @@ void button_echo(void)
     digitalWrite(LED_0, LOW);
   }
 
-  if(button_states.button_1)
+  if(digitalRead(BUTTON_1) == LOW)
   {
     digitalWrite(LED_1, HIGH);
   }
@@ -542,7 +255,7 @@ void button_echo(void)
     digitalWrite(LED_1, LOW);
   }
 
-  if(button_states.button_2)
+  if(digitalRead(BUTTON_2) == LOW)
   {
     digitalWrite(LED_2, HIGH);
   }
@@ -551,7 +264,7 @@ void button_echo(void)
     digitalWrite(LED_2, LOW);
   }
 
-  if(button_states.button_3)
+  if(digitalRead(BUTTON_3) == LOW)
   {
     digitalWrite(LED_3, HIGH);
   }
@@ -560,7 +273,7 @@ void button_echo(void)
     digitalWrite(LED_3, LOW);
   }
 
-  if(button_states.button_menu)
+  if(digitalRead(BUTTON_4) == LOW)
   {
     digitalWrite(LED_5, HIGH);
   }
@@ -568,83 +281,25 @@ void button_echo(void)
   {
     digitalWrite(LED_5, LOW);
   }
-
-  
-}
-
-void listen_for_buttons(void)
-{  
-  if(digitalRead(BUTTON_0) == LOW && !button_states.button_0)
-  {
-    button_states.button_0 = 1;
-    button_press = 1;
-    button_states.last_button = 0;
-  }
-  else
-  {
-    button_states.button_0 = 0;
-  }
-  
-  if(digitalRead(BUTTON_1) == LOW && !button_states.button_1)
-  {
-    button_states.button_1 = 1;
-    button_press = 1;
-    button_states.last_button = 1;
-  }
-  else
-  {
-    button_states.button_1 = 0;
-  }
-
-  if(digitalRead(BUTTON_2) == LOW && !button_states.button_2)
-  {
-    button_states.button_2 = 1;
-    button_press = 1;
-    button_states.last_button = 2;
-  }
-  else
-  {
-    button_states.button_2 = 0;
-  }
-
-  if(digitalRead(BUTTON_3) == LOW && !button_states.button_3)
-  {
-    button_states.button_3 = 1;
-    button_press = 1;
-    button_states.last_button = 3;
-  }
-  else
-  {
-    button_states.button_3 = 0;
-  }
-
-  if(digitalRead(BUTTON_4) == LOW && !button_states.button_menu)
-  {
-    button_states.button_menu = 1;
-    button_press = 1;
-    button_states.last_button = 4;
-  }
-  else
-  {
-    button_states.button_menu = 0;
   }
   
 }
+
+/* this function plays button sound effects when a button is pressed and depends on the current state of the game */
 void button_sound(void)
 {
   static unsigned int last_press = 0;
   float wobbly_sound = 0.0f;
 
   
-  if(button_press)
+  if(button_states.last_button != 255)
   {
     last_press = millis();
-    button_press = 0;
   }
 
 
   /* the menu sounds */
-  if((state == STATE_MENU || state == STATE_HIGHSCORE) && millis() - last_press < BUTTON_SOUND_LENGTH)
+  if((state == STATE_MENU || state == STATE_HIGHSCORE || state == STATE_HIGHSCORE_0 || state == STATE_HIGHSCORE_1 || state == STATE_HIGHSCORE_2 || state == STATE_HIGHSCORE_3) && millis() - last_press < BUTTON_SOUND_LENGTH)
   {
     if((millis() - last_press) % 23 == 0)
     {
@@ -655,7 +310,7 @@ void button_sound(void)
 
   /* game sounds */
 
-  if(state == STATE_GAME && millis() - last_press < BUTTON_SOUND_LENGTH)
+  if((state == STATE_GAME_MODE_0 || state == STATE_GAME_MODE_1 || state == STATE_GAME_MODE_2 || state == STATE_GAME_MODE_3) && millis() - last_press < BUTTON_SOUND_LENGTH)
   {
     /* having to multiply the amplitude as the pitch gets higher because it is harder to distinguish higher pitch notes than lower pitch */
     wobbly_sound = sin((millis() - last_press) / 70.0) * (25 + button_states.last_button * 12);
@@ -663,7 +318,7 @@ void button_sound(void)
     if((millis() - last_press) % 23 == 0)
     {
 
-      /* the original 1978 game appears to go from middle c and travels 2 whole steps up to c5 */
+      /* the original 1978 game appears to go from middle c and travels 2 whole step intervals up to c5 depending on the button pressed */
       if(button_states.last_button == 0)
       {
         tone(SPEAKER_CHANNEL_0, NOTE_C4 + wobbly_sound, 100);
@@ -690,40 +345,227 @@ void button_sound(void)
 
 }
 
-void state_game_logic(void)
+/* listen for button presses */
+void listen()
 {
-  /* TODO echo the sequence by re-seeding rand with srand(random_seed); and running rand() to get the sequence from the beginning each time the user does well. */
-}
+  static uint8_t liftup = 0;
 
-void state_menu_logic(void)
-{
-  /* temporary listening for the menu button to start the game. Will use taps in the future */
-  if(button_states.button_menu)
+  if(liftup) /* only register a button press if all buttons are not being pressed/have not been pressed on the last cycle */
   {
-    random_seed = millis();
-    state = STATE_GAME;
-  }
-}
+    if(digitalRead(BUTTON_0) == LOW)
+    {
+      liftup = 0;
+      button_states.button_0 = 1;
+      button_states.last_press_millis = millis();
+      button_states.last_button = 0;
+    }
 
-void state_logic(void)
-{
-  static unsigned long song_column = 0;
-  
-  if(state == STATE_MENU || state == STATE_HIGHSCORE)
-  {
-    state_menu_logic();
-    //play_music(menu_music, (sizeof(menu_music) / sizeof(menu_music[0])) - 1, song_column, 200);
-    //play_music(test_music, (sizeof(test_music) / sizeof(test_music[0])) - 1, song_column, 200 * 2); /* 100*2 */
+    if(digitalRead(BUTTON_1) == LOW)
+    {
+      liftup = 0;
+      button_states.button_1 = 1;
+      button_states.last_press_millis = millis();
+      button_states.last_button = 1;
+    }
+
+    if(digitalRead(BUTTON_2) == LOW)
+    {
+      liftup = 0;
+      button_states.button_2 = 1;
+      button_states.last_press_millis = millis();
+      button_states.last_button = 2;
+    }
+
+    if(digitalRead(BUTTON_3) == LOW)
+    {
+      liftup = 0;
+      button_states.button_3 = 1;
+      button_states.last_press_millis = millis();
+      button_states.last_button = 3;
+    }
+
+    if(digitalRead(BUTTON_4) == LOW)
+    {
+      liftup = 0;
+      button_states.button_menu = 1;
+      button_states.last_press_millis = millis();
+      button_states.last_button = 4;
+    }
   }
   else
   {
-    state_game_logic();
+    if(digitalRead(BUTTON_0) == HIGH && digitalRead(BUTTON_1) == HIGH && digitalRead(BUTTON_2) == HIGH && digitalRead(BUTTON_3) == HIGH && digitalRead(BUTTON_4) == HIGH)
+    {
+      liftup = 1;
+    }
+    else
+    { /* set everything to default because a button is only "active" for a single cycle */
+      button_states.button_0 = 0;
+      button_states.button_1 = 0;
+      button_states.button_2 = 0;
+      button_states.button_3 = 0;
+      button_states.button_menu = 0;
+      button_states.last_button = 255;
+    }
   }
+}
 
+/* this is where the simon says game logic happens */
+void game_logic()
+{
+  static uint32_t temp_level = 0, last_millis = 0, mode = 0;
+  static uint16_t counter = 0, last_press = 255;
+
+  uint8_t random_value; /* a temporary variable for storing the current frame of playback or testing */
+
+  if(reset_game)
+  {
+    counter = 0;
+    reset_game = 0;
+    mode = 0;
+    last_millis = millis();
+    random_seed = millis();
+    srand(random_seed);
+    game_level = 0;
+    playback = 1;
+  }
+  if(playback)
+  {
+    button_states.last_button = 255;
+  }
+  
+  /* controls the speed of the game. The original intention was to not block the sound effects from playing because of using a delay, but the microcontroller was not fast enough to do both anyway */
+  if(millis() - last_millis > ROUND_DELAY) /* if the mode is the reading mode, there will be no delay because the user can play back the sequence however fast they want */
+  {
+        if(counter <= game_level && mode == 0) /* this is the playback mode. This plays back the sequence */
+        {
+          digitalWrite(LED_0, LOW);
+          digitalWrite(LED_1, LOW);
+          digitalWrite(LED_2, LOW);
+          digitalWrite(LED_3, LOW);
+
+          /* The game "remembers" sequences using the rand() function. The way this works is by resetting the seed that was generated before running the game.
+           *  this means that in order to read back the sequence, it has to be re seeded back to the generated seed, and then read from the beginning and cannot
+           *  be randomly accessed. This is perfectly fine because this game will only be played from the start to finish of the passed "levels" of the sequence.
+           */
+
+          random_value = rand() % 4; /* only allow 0-3 from the random function */
+          
+          button_states.last_button = random_value; /* sets the button state artificially to simulate button presses to make it play the button sound effect */
+
+          switch(random_value) /* turn on the appropriate LED */
+          {
+            case 0:
+              digitalWrite(LED_0, HIGH);
+            break;
+            case 1:
+              digitalWrite(LED_1, HIGH);
+            break;
+            case 2:
+              digitalWrite(LED_2, HIGH);
+            break;
+            case 3:
+              digitalWrite(LED_3, HIGH);
+            break;
+          }
+
+          last_millis = millis();
+          counter++;
+        }
+        else if(mode == 0) /* if it has reached the end of the total sequence, change and prepare the user input mode */
+        {
+          srand(random_seed); /* reset rand to the original seed so it goes back to the beginning */
+          counter = 0;
+          mode = 1;
+          playback = 0;
+        }
+
+        
+
+        if(counter <= game_level && mode == 1) /* the input reading mode */
+        {
+          if(button_states.button_0 || button_states.button_1 || button_states.button_2 || button_states.button_3) /* if any of the 4 buttons are pressed */
+          {
+
+            random_value = rand() % 4; /* get the current sequence */
+
+            if(random_value == button_states.last_button) /* make sure it is a valid press */
+            {
+              counter++;
+            }
+            else /* the user pressed the wrong button here */
+            {
+              /* dun dun dunnn sound effect for losing the stream */
+              noTone(SPEAKER_CHANNEL_0);
+              digitalWrite(LED_5, HIGH);
+              tone(SPEAKER_CHANNEL_0, NOTE_F4);
+              delay(500);
+              noTone(SPEAKER_CHANNEL_0);
+              tone(SPEAKER_CHANNEL_0, NOTE_C4);
+              delay(500);
+              noTone(SPEAKER_CHANNEL_0);
+              tone(SPEAKER_CHANNEL_0, NOTE_B3);
+              delay(800);
+              noTone(SPEAKER_CHANNEL_0);
+
+              switch(state) /* determine which one and whether or not to write the high score for the difficulty selected */
+              {
+                case STATE_GAME_MODE_0:
+                  if(game_level > difficulty_1_hs) /* this is true for all of the following cases in the switch statement, but it will only write to the high score variable if it is higher */
+                  {
+                    difficulty_1_hs = game_level;
+                  }
+                  state = STATE_HIGHSCORE_0;
+                break;
+                case STATE_GAME_MODE_1:
+                  if(game_level > difficulty_2_hs)
+                  {
+                    difficulty_2_hs = game_level;
+                  }
+                  state = STATE_HIGHSCORE_1;
+                break;
+                case STATE_GAME_MODE_2:
+                  if(game_level > difficulty_3_hs)
+                  {
+                    difficulty_3_hs = game_level;
+                  }
+                  state = STATE_HIGHSCORE_2;
+                break;
+                case STATE_GAME_MODE_3:
+                  if(game_level > difficulty_4_hs)
+                  {
+                    difficulty_4_hs = game_level;
+                  }
+                  state = STATE_HIGHSCORE_3;
+                break;
+              }
+              
+              /* TODO write score to flash. Never got this to work. MSP flash sections were difficult to get documentation on and there wasnt enough time to dive completely into the very long documentation for the MSP432 microcontroller */
+            }
+          }
+          else if(button_states.button_menu) /* this is the escape button. Completely exits the current game and returns back to the main menu */
+          {
+            state = STATE_MENU;
+          }
+        }
+        else if(mode == 1) /* reached the end of the sequence from the players input mode */
+        {
+          game_level+= 1 + (state - STATE_GAME_MODE_0); /* TODO increase by difficulty */
+          counter = 0;
+          mode = 0;
+          playback = 1;
+          srand(random_seed);
+          /* delay and let the last sound play. It gets confusing if the sequence plays immediately after the user ends playing it back */
+          last_millis = millis() + 400;
+          delay(400);
+        }
+
+    
+  }
   
 }
 
-void setup(void)
+void setup()
 {
   /* set up the led pins */
   pinMode(LED_0, OUTPUT);
@@ -743,121 +585,180 @@ void setup(void)
   pinMode(BUTTON_3, INPUT_PULLUP);
   pinMode(BUTTON_4, INPUT_PULLUP);
 
+  /* set the global control variables here */
   state = STATE_MENU;
-  button_press = 0;
-  music_output = 1;
+  game_level = 0;
+  reset_game = 1;
+  playback = 0;
 
+  /* initialize the button state struct */
   button_states.button_0 = 0;
   button_states.button_1 = 0;
   button_states.button_2 = 0;
   button_states.button_3 = 0;
   button_states.button_menu = 0;
-  button_states.last_button = 255;
+
 
 }
 
-void loop(void)
+void loop()
 {
-  listen_for_buttons();
-  button_sound();
+  static int press_selection = 255, temp_delay = 0;
+
+  /* these run to check the status of input and respond accordingly */
+  listen();
   button_echo();
 
-  state_logic();
-}
+  
+  switch(state) /* the state machine of the game or menus */
+  {
+    case STATE_MENU:
+      /* display_binary(0b11111100); */
+      /* navigate the menu */
+      /* menu press on the far right goes to highscore menu. any others are diffculty in the game */
 
-/*
+      /* the LEDs indicate valid selections */
+      digitalWrite(LED_0, HIGH);
+      digitalWrite(LED_1, HIGH);
+      digitalWrite(LED_2, HIGH);
+      digitalWrite(LED_3, HIGH);
+      if(millis() - temp_delay > 500 && press_selection != 255) /* select a game and also delay between changing to the desired state so the sound effect plays out */
+      {
+        switch(press_selection)
+      {
+        case 0:
+          state = STATE_GAME_MODE_0;
+          reset_game = 1;
+          press_selection = 255; /* set this to 255 to not confuse the game logic */
+        break;
+        case 1:
+          state = STATE_GAME_MODE_1;
+          reset_game = 1;
+          press_selection = 255;
+        break;
+        case 2:
+          state = STATE_GAME_MODE_2;
+          reset_game = 1;
+          press_selection = 255;
+        break;
+        case 3:
+          state = STATE_GAME_MODE_3;
+          reset_game = 1;
+          press_selection = 255;
+        break;
+      }
+      }
 
-const int ledPinG = 1;
-const int ledPinR = 2;
-const int ledPinY = 3;
-const int ledPinB = 4;
-const int buttonPinG = PUSH2;
-const int buttonPinR = PUSH2;
-const int buttonPinY = PUSH2;
-const int buttonPinB = PUSH2;
-int buttonStateG = digitalRead(buttonPinG);
-int buttonStateR = digitalRead(buttonPinY);
-int buttonStateY = digitalRead(buttonPinR);
-int buttonStateB = digitalRead(buttonPinB);
-void setup() {
-  srand(time(0));
-  int lightSequence [50];
-  int lightNum = (rand() % 3) + 1;
-  int i=0;
-  while(buttonStateG == HIGH && buttonStateR == HIGH && buttonStateY == HIGH && buttonStateB == HIGH){
-    for (int j=0; j<i; j++){
-        switch (lightSequence[j]){
-          case  1:
-            digitalWrite(ledPinG, HIGH);
-            tone(8, NOTE_D4, (4/1000));
-            delay(1000);
-            digitalWrite(ledPinG, LOW);
-            break;
-          case  2:
-            digitalWrite(ledPinR, HIGH);
-            tone(8, NOTE_C4, (4/1000));
-            delay(1000);
-            digitalWrite(ledPinR, LOW);
-            break;
-          case  3:
-            digitalWrite(ledPinY, HIGH);
-            tone(8, NOTE_E4, (4/1000));
-            delay(1000);
-            digitalWrite(ledPinY, LOW);
-            break;
-          case  4:
-            digitalWrite(ledPinB, HIGH);
-            tone(8, NOTE_F4, (4/1000));
-            delay(1000);
-            digitalWrite(ledPinB, LOW);
-            break;
-        }
-    } //previous pattern
+      /* respond to button presses */
+      if(button_states.button_0)
+      {
+        press_selection = 0;
+        temp_delay = millis();
+        delay(10); /* delay here because the game goes into a glitched state without it. The sound effects probably effect the timing of future delays for some reason */
+      }
+
+      if(button_states.button_1)
+      {
+        press_selection = 1;
+        temp_delay = millis();
+        delay(10); /* delay here because the game goes into a glitched state without it. The sound effects probably effect the timing of future delays for some reason */
+      }
+
+      if(button_states.button_2)
+      {
+        press_selection = 2;
+        temp_delay = millis();
+        delay(10); /* delay here because the game goes into a glitched state without it. The sound effects probably effect the timing of future delays for some reason */
+      }
+
+      if(button_states.button_3)
+      {
+        press_selection = 3;
+        temp_delay = millis();
+        delay(10); /* delay here because the game goes into a glitched state without it. The sound effects probably effect the timing of future delays for some reason */
+      }
+
+      if(button_states.button_menu) /* if the menu/back button is pressed, it will change to the highscore selection menu */
+      {
+        state = STATE_HIGHSCORE;
+      }
+    break;
     
-    lightSequence[i] = lightNum;
-    
-    switch (lightNum){
-      case  1:
-        digitalWrite(ledPinG, HIGH);
-        tone(8, NOTE_D4, (4/1000));
-        delay(1000);
-        digitalWrite(ledPinG, LOW);
-        break;
-      case  2:
-        digitalWrite(ledPinR, HIGH);
-        tone(8, NOTE_C4, (4/1000));
-        delay(1000);
-        digitalWrite(ledPinR, LOW);
-        break;
-      case  3:
-        digitalWrite(ledPinY, HIGH);
-        tone(8, NOTE_E4, (4/1000));
-        delay(1000);
-        digitalWrite(ledPinY, LOW);
-        break;
-      case  4:
-        digitalWrite(ledPinB, HIGH);
-        tone(8, NOTE_F4, (4/1000));
-        delay(1000);
-        digitalWrite(ledPinB, LOW);
-        break;
-    } //added on to pattern
-    
-    int totalRight = 0;
-    for (int j=0; j<=i; j++){
-        if ((buttonStateG == HIGH && lightSequence[j] == 1)||(buttonStateR == HIGH && lightSequence[j] == 2)
-            ||(buttonStateY == HIGH && lightSequence[j] == 3)||(buttonStateB == HIGH && lightSequence[j] == 4)){
-            totalRight++;
-        }
-    }
-    if (totalRight = i){
-        i++;
-    }
+    case STATE_GAME_MODE_0: /* NOTE: there are no break;'s here because all difficulty states use the same logic. The logic decides how to respond though. This is a valid switch statement */
+    case STATE_GAME_MODE_1:
+    case STATE_GAME_MODE_2:
+    case STATE_GAME_MODE_3:
+      /* update the game logic */
+      game_logic();
+    break; /* treats all of the game difficulty states the same in the state machine */
+
+    case STATE_HIGHSCORE: /* this is the highscore selecting menu state */
+      /* display_binary(63); */
+      digitalWrite(LED_0, HIGH);
+      digitalWrite(LED_1, HIGH);
+      digitalWrite(LED_2, HIGH);
+      digitalWrite(LED_3, HIGH);
+      digitalWrite(LED_4, HIGH); /* the next to last LED on the right indicates that this is the high score selection menu */
+
+      if(button_states.button_0)
+      {
+        state = STATE_HIGHSCORE_0;
+      }
+
+      if(button_states.button_1)
+      {
+        state = STATE_HIGHSCORE_1;
+      }
+
+      if(button_states.button_2)
+      {
+        state = STATE_HIGHSCORE_2;
+      }
+
+      if(button_states.button_3)
+      {
+        state = STATE_HIGHSCORE_3;
+      }
+
+      if(button_states.button_menu) /* send it back to the main menu if this has been pressed */
+      {
+        state = STATE_MENU;
+        digitalWrite(LED_4, LOW);
+      }
+    break;
+
+    /* all of the display highscore states that all exit when the back button is pressed */
+    case STATE_HIGHSCORE_0:
+      display_binary(difficulty_1_hs);
+      if(button_states.button_menu)
+      {
+        state = STATE_HIGHSCORE; /* send it back to the high score selection menu */
+      }
+    break;
+    case STATE_HIGHSCORE_1:
+      display_binary(difficulty_2_hs);
+      if(button_states.button_menu)
+      {
+        state = STATE_HIGHSCORE; /* send it back to the high score selection menu */
+      }
+    break;
+    case STATE_HIGHSCORE_2:
+      display_binary(difficulty_3_hs);
+      if(button_states.button_menu)
+      {
+        state = STATE_HIGHSCORE; /* send it back to the high score selection menu */
+      }
+    break;
+    case STATE_HIGHSCORE_3:
+      display_binary(difficulty_4_hs);
+      if(button_states.button_menu)
+      {
+        state = STATE_HIGHSCORE; /* send it back to the high score selection menu */
+      }
+    break;
   }
-}
 
-void loop() {
-  
+  /* play the button sound. Put at the very end because the button state can be internally modified to inject button presses and it will be reset otherwise */
+  button_sound();
   
 }
-*/
